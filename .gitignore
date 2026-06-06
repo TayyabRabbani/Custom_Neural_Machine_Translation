@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environments
+venv/
+env/
+.venv/
+conda_envs/
+
+# IDE
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Dataset files
+*.txt
+!README.txt
+
+# Large checkpoints
+*.h5
+*.keras
+*.ckpt
+
+# Local experiment scripts
+script.py
+test_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TensorBoard
+logs/
+
+# Temporary files
+temp/
+tmp/
+
+# Kaggle
+.kaggle/
+
+# Ignore checkpoints folder
+checkpoints/
+
+# Ignore local configs
+.env
