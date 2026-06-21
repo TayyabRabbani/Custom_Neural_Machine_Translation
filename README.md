@@ -1,192 +1,172 @@
 # Custom Neural Machine Translation System
 
-A from-scratch implementation of **Neural Machine Translation (NMT)** for **Portuguese → English translation** using both:
+A from-scratch implementation of **Neural Machine Translation (NMT)** for
+**Portuguese → English** translation, built entirely in **TensorFlow / Keras**
+without any pretrained translation models:
 
-- **Seq2Seq LSTM**
-- **Transformer Architecture**
-
-Built entirely in **TensorFlow** without pretrained translation models.
+- **Seq2Seq LSTM** (with and without Bahdanau attention)
+- **Transformer** (full "Attention Is All You Need" architecture, from scratch)
 
 ---
 
 ## Project Overview
 
-This project compares recurrent and attention-based architectures for Neural Machine Translation under constrained compute settings.
+This project compares recurrent and attention-based architectures for NMT under
+constrained compute. It was built to understand, end to end:
 
-The goal was to understand:
-
-- Sequence-to-sequence learning
-- Tokenization strategies
-- Teacher forcing
-- Transformer attention mechanisms
-- Training dynamics between LSTM and Transformer architectures
+- Sequence-to-sequence learning and teacher forcing
+- Subword tokenization (BPE)
+- Bahdanau (additive) attention
+- The Transformer: multi-head attention, positional encoding, masking, and the
+  warmup learning-rate schedule
+- Training dynamics and translation quality of LSTM vs. Transformer
 
 ---
 
 ## Features
 
 ### Data Pipeline
-- Custom preprocessing pipeline
-- Portuguese-English dataset handling
-- Dynamic batching and padding
-- TensorFlow `tf.data` pipeline
+- Custom preprocessing for the Portuguese–English corpus
+- Subword **Byte-Pair-Encoding (BPE)** tokenizer (shared PT/EN vocab, 10k tokens)
+- Special tokens: `[PAD]`, `[UNK]`, `[START]`, `[END]`
+- `tf.data` pipeline with padding, batching, and prefetch
 
-### Tokenization
-- Custom **Byte Pair Encoding (BPE)** tokenizer
-- Shared vocabulary for Portuguese and English
-- Special tokens:
-  - `[PAD]`
-  - `[UNK]`
-  - `[START]`
-  - `[END]`
+### Models
+**Seq2Seq LSTM** — encoder/decoder with teacher forcing and greedy decoding;
+an attention variant adds Bahdanau attention over the encoder states.
 
-### Models Implemented
-
-#### 1. Seq2Seq LSTM
-- Encoder–Decoder architecture
-- Teacher forcing
-- Greedy decoding inference
-
-#### 2. Transformer
-Implemented from scratch:
-
-- Positional Encoding
-- Multi-Head Self Attention
-- Encoder Stack
-- Decoder Stack
-- Feed Forward Network
-- Residual Connections
-- Layer Normalization
-- Masked Attention
-- Warmup Learning Rate Scheduler (Vaswani et al.)
+**Transformer** (from scratch) — positional encoding, multi-head self-attention,
+encoder/decoder stacks, position-wise feed-forward, residual connections, layer
+normalization, padding + look-ahead masking, and the Vaswani warmup LR schedule.
 
 ---
 
 ## Dataset
 
-**Portuguese-English Translation Dataset**
-
-- **50K sentence pairs**
-- Conversational Portuguese ↔ English translations
-
----
-
-## Training Environment
-
-### Local
-- **GPU:** RTX 3050 (8GB)
-
-### Cloud
-- **Platform:** Kaggle
-- **GPU:** Tesla T4
+Portuguese–English sentence pairs (Tatoeba / Anki `por.txt`,
+**~169,000 pairs**, tab-separated `EN \t PT`). Split 80 / 10 / 10 into
+train / validation / test with a fixed seed. The dataset file is not committed
+(see `.gitignore`); download `por.txt` and place it at `src/data/por.txt`.
 
 ---
 
 ## Results
 
-| Model | Validation Loss |
-|--------|----------------|
-| Seq2Seq LSTM | ~4.7 |
-| Transformer | **~1.55** |
+Transformer trained on the **full corpus** (Kaggle, Tesla T4, 20 epochs):
 
-The Transformer significantly outperformed the vanilla LSTM model while maintaining comparable parameter counts.
+| Model | Data | Val loss | Val token acc | Test BLEU | Test chrF |
+|-------|------|---------:|--------------:|----------:|----------:|
+| Seq2Seq LSTM (full) | full corpus | ~1.78 | – | – | – |
+| **Transformer** | full corpus | **0.75** | **0.86** | **64.0** | **75.3** |
 
----
+BLEU / chrF are corpus scores (sacrebleu) over 1,000 held-out test sentences.
+Because this is short conversational text, BLEU in the 60s is expected and is
+not directly comparable to WMT-style benchmarks; many BLEU "misses" are valid
+paraphrases.
 
-## Sample Translations
+**Transformer config:** `d_model=256`, `layers=4`, `heads=8`, `dff=1024`,
+`max_len=40`, `dropout=0.1`, vocab `10000`, Adam(0.9, 0.98, 1e-9) with 4000 warmup steps.
 
-### Transformer Outputs
+### Sample translations (Transformer)
 
-| Portuguese | Predicted English |
-|------------|-------------------|
-| `Eu gosto de futebol.` | `I like soccer.` |
-| `Ela está estudando.` | `She is studying.` |
-| `Você fala inglês?` | `Can you speak English?` |
-| `Onde está meu carro?` | `Where's my car?` |
-| `Eu não entendo.` | `I don't understand.` |
+| Portuguese | Model output |
+|------------|--------------|
+| `Eu gosto de futebol.` | I like soccer. |
+| `Ela está estudando.` | She's studying. |
+| `Você fala inglês?` | Do you speak English? |
+| `Onde está meu carro?` | Where's my car? |
+| `Você pode me ajudar?` | Can you help me? |
+| `Tom gosta de caçar.` | Tom likes hunting. |
 
 ---
 
 ## Project Structure
 
 ```text
-custom-neural-machine-translation/
-│
+NMT-Research/
 ├── artifacts/
-│   └── tokenizer.json
-│
+│   ├── tokenizer.json                  # original shared BPE tokenizer
+│   └── tokenizer_transformer.json      # tokenizer from the full Transformer run
 ├── configs/
-│
+│   └── data_config.py
+├── kaggle/
+│   ├── transformer_nmt_kaggle.ipynb    # self-contained Kaggle training notebook
+│   └── build_nb.py                     # regenerates the notebook
 ├── src/
-│   ├── data/
-│   ├── evaluation/
+│   ├── data/                           # preprocessing, tokenizer, dataloader
 │   ├── models/
 │   │   ├── lstm_seq2seq.py
-│   │   └── transformer/
-│   └── training/
-│
+│   │   ├── attention_seq2seq.py
+│   │   └── transformer/                # attention, encoder, decoder, positional enc.
+│   ├── training/                       # trainers + masked loss + LR schedule
+│   └── evaluation/                     # inference scripts
+├── infer_transformer.py                # local inference + BLEU for the trained model
+├── checkpoints/                        # weights (gitignored — see Weights below)
 ├── requirements.txt
-├── README.md
-└── .gitignore
+└── README.md
 ```
 
 ---
 
-## Installation
-
-Clone the repository:
+## Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/custom-neural-machine-translation.git
-cd custom-neural-machine-translation
-```
-
-Install dependencies:
-
-```bash
+git clone https://github.com/TayyabRabbani/<repo-name>.git
+cd <repo-name>
 pip install -r requirements.txt
 ```
 
----
-
-## Run Training
-
-### LSTM
-
-```bash
-python -m src.training.trainer
-```
-
-### Transformer
-
-```bash
-python -m src.training.transformer_trainer
-```
+The models load Keras-3 `.weights.h5` checkpoints, so use **TensorFlow 2.19**
+(the version used for training on Kaggle). On Python 3.13, TF 2.19 has no wheel —
+use a Python 3.10–3.12 environment.
 
 ---
 
-## Run Inference
+## Train
 
-### LSTM
+The Transformer is trained on Kaggle via the self-contained notebook
+[`kaggle/transformer_nmt_kaggle.ipynb`](kaggle/transformer_nmt_kaggle.ipynb):
+upload `por.txt` as a dataset, enable the GPU, and run all cells. It trains the
+tokenizer, builds the model, trains on the full corpus, and reports BLEU.
+
+The original LSTM / Transformer training modules are also runnable locally:
 
 ```bash
-python -m src.evaluation.inference
+python -m src.training.trainer                # LSTM
+python -m src.training.transformer_trainer    # Transformer
 ```
 
-### Transformer
+---
+
+## Inference + Evaluation
+
+Local inference and BLEU for the trained Transformer. Place the trained weights
+at `checkpoints/transformer/transformer_best.weights.h5` and the tokenizer at
+`artifacts/tokenizer_transformer.json`, then:
 
 ```bash
-python -m src.evaluation.transformer_inference
+# demo translations + BLEU/chrF on N held-out test sentences (default 1000)
+python infer_transformer.py 1000
+
+# interactive: type Portuguese, get English (run with no output redirect)
+python infer_transformer.py
 ```
+
+---
+
+## Weights
+
+Model checkpoints (`*.h5`, `checkpoints/`) are **not** committed — they are large
+binaries. To share trained weights, attach them to a GitHub Release or use
+Git LFS rather than committing them to the repo.
 
 ---
 
 ## Future Improvements
 
-- BLEU score benchmarking
-- Beam search decoding
-- Larger dataset training
-- Attention visualization
+- Beam-search decoding
+- Attention-weight visualization
+- Separate PT / EN tokenizers and larger vocabularies
 - Transformer scaling experiments
 
 ---

@@ -24,6 +24,7 @@ conda_envs/
 # Dataset files
 *.txt
 !README.txt
+!requirements.txt
 
 # Large checkpoints
 *.h5
