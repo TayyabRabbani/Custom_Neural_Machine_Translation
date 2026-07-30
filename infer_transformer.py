@@ -17,9 +17,10 @@ NUM_LAYERS = 4
 NUM_HEADS  = 8
 DFF        = 1024
 
-TOKENIZER_PATH = os.path.join("artifacts", "tokenizer_transformer.json")
-WEIGHTS_PATH   = os.path.join("checkpoints", "transformer", "transformer_best.weights.h5")
-DATA_PATH      = os.path.join("src", "data", "por.txt")
+ROOT = os.path.dirname(os.path.abspath(__file__))
+TOKENIZER_PATH = os.path.join(ROOT, "artifacts", "tokenizer_transformer.json")
+WEIGHTS_PATH   = os.path.join(ROOT, "checkpoints", "transformer", "transformer_best.weights.h5")
+DATA_PATH      = os.path.join(ROOT, "src", "data", "por.txt")
 
 print("TensorFlow:", tf.__version__)
 

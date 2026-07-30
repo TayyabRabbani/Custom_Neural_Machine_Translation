@@ -100,9 +100,14 @@ NMT-Research/
 │   │   └── transformer/                # attention, encoder, decoder, positional enc.
 │   ├── training/                       # trainers + masked loss + LR schedule
 │   └── evaluation/                     # inference scripts
+├── backend/                            # FastAPI app + LangChain HF reference
+│   ├── main.py
+│   └── reference.py
+├── run_server.py                       # launches the backend
 ├── infer_transformer.py                # local inference + BLEU for the trained model
 ├── checkpoints/                        # weights (gitignored — see Weights below)
 ├── requirements.txt
+├── requirements-serve.txt              # serving deps (fastapi, transformers, langchain…)
 └── README.md
 ```
 
@@ -150,6 +155,37 @@ python infer_transformer.py 1000
 
 # interactive: type Portuguese, get English (run with no output redirect)
 python infer_transformer.py
+```
+
+---
+
+## Web App / API (FastAPI)
+
+A FastAPI backend serves a side-by-side comparison: **your trained Transformer**
+vs. a **Hugging Face reference model** (`Helsinki-NLP/opus-mt-ROMANCE-en`) exposed
+through a LangChain `Runnable`. It includes a minimal web UI.
+
+Install serving deps and run from the project root:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-serve.txt
+python run_server.py          # http://127.0.0.1:8000
+```
+
+- `GET  /`          → web UI (type Portuguese, see both translations)
+- `POST /translate` → `{"text": "..."}` ⇒ `{model_translation, reference_translation}`
+- `GET  /docs`      → Swagger UI
+- `GET  /health`    → status + reference model id
+
+The reference model is configurable: set `HF_REF_MODEL` (and `HF_SRC_TOKEN` for
+multilingual Marian models that need a source-language token).
+
+```
+backend/
+├── main.py        # FastAPI app + web UI
+└── reference.py   # HF model via LangChain (PT -> EN)
+run_server.py      # launcher
 ```
 
 ---

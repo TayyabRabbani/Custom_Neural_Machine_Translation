@@ -2,31 +2,23 @@
 
 import tensorflow as tf
 
-from src.models.transformer.encoder import (
-    Encoder
-)
-
-from src.models.transformer.decoder import (
-    Decoder,
-    create_look_ahead_mask
-)
+from src.models.transformer.encoder import Encoder
+from src.models.transformer.decoder import Decoder, create_look_ahead_mask
 
 
-class Transformer(
-    tf.keras.Model
-):
-
+class Transformer(tf.keras.Model):
     def __init__(
         self,
         vocab_size,
-        num_layers=3,
+        num_layers=4,
         d_model=256,
         num_heads=8,
         dff=1024,
         max_length=40,
-        dropout_rate=0.1
+        dropout_rate=0.1,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.encoder = Encoder(
             num_layers=num_layers,
@@ -35,7 +27,7 @@ class Transformer(
             dff=dff,
             vocab_size=vocab_size,
             max_length=max_length,
-            dropout_rate=dropout_rate
+            dropout_rate=dropout_rate,
         )
 
         self.decoder = Decoder(
@@ -45,151 +37,54 @@ class Transformer(
             dff=dff,
             vocab_size=vocab_size,
             max_length=max_length,
-            dropout_rate=dropout_rate
+            dropout_rate=dropout_rate,
         )
 
-        self.final_layer = (
-            tf.keras.layers.Dense(
-                vocab_size
-            )
+        self.final_layer = tf.keras.layers.Dense(vocab_size)
+
+    @staticmethod
+    def padding_mask(seq):
+        mask = tf.cast(tf.math.equal(seq, 0), tf.float32)
+        return mask[:, tf.newaxis, tf.newaxis, :]
+
+    def encode(self, encoder_inputs, training=False):
+        pad_mask = self.padding_mask(encoder_inputs)
+        encoder_output = self.encoder(
+            encoder_inputs, training=training, padding_mask=pad_mask
         )
+        return encoder_output, pad_mask
 
-    def create_padding_mask(
-        self,
-        seq
-    ):
-
-        mask = tf.cast(
-            tf.math.equal(
-                seq,
-                0
-            ),
-            tf.float32
-        )
-
-        return mask[
-            :,
-            tf.newaxis,
-            tf.newaxis,
-            :
-        ]
-
-    def call(
-        self,
-        inputs,
-        training=False
-    ):
-
-        encoder_inputs = (
-            inputs[
-                "encoder_inputs"
-            ]
-        )
-
-        decoder_inputs = (
-            inputs[
-                "decoder_inputs"
-            ]
-        )
-
-        encoder_padding_mask = (
-            self.create_padding_mask(
-                encoder_inputs
-            )
-        )
-
-        decoder_padding_mask = (
-            self.create_padding_mask(
-                encoder_inputs
-            )
-        )
-
-        # 1. Create padding mask for the decoder inputs
-        dec_target_padding_mask = (
-            self.create_padding_mask(
-                decoder_inputs
-            )
-        )
-
-        seq_length = tf.shape(
-            decoder_inputs
-        )[1]
-
-        # 2. Create the look-ahead mask
-        look_ahead_mask = (
-            create_look_ahead_mask(
-                seq_length
-            )
-        )
-
-        # 3. Combine them to ensure padded tokens aren't attended to
+    def decode(self, decoder_inputs, encoder_output, encoder_pad_mask, training=False):
+        seq_length = tf.shape(decoder_inputs)[1]
         combined_mask = tf.maximum(
-            look_ahead_mask,
-            dec_target_padding_mask
+            create_look_ahead_mask(seq_length),
+            self.padding_mask(decoder_inputs),
         )
-
-        encoder_output = (
-            self.encoder(
-                encoder_inputs,
-                training=training,
-                mask=
-                encoder_padding_mask
-            )
+        decoder_output, attn = self.decoder(
+            decoder_inputs,
+            encoder_output,
+            training=training,
+            combined_mask=combined_mask,
+            padding_mask=encoder_pad_mask,
         )
+        return self.final_layer(decoder_output), attn
 
-        decoder_output, attention_weights = (
-            self.decoder(
-                decoder_inputs,
-                encoder_output,
-                training=training,
-                look_ahead_mask=
-                combined_mask,          # <-- Updated here
-                padding_mask=
-                decoder_padding_mask    # <-- Encoder padding mask for cross-attention
-            )
+    def call(self, inputs, training=False):
+        encoder_output, pad_mask = self.encode(
+            inputs["encoder_inputs"], training=training
         )
-
-        logits = (
-            self.final_layer(
-                decoder_output
-            )
+        logits, _ = self.decode(
+            inputs["decoder_inputs"], encoder_output, pad_mask, training=training
         )
-
         return logits
 
 
 if __name__ == "__main__":
-
     vocab_size = 10000
-
-    model = Transformer(
-        vocab_size=vocab_size
-    )
-
-    dummy_batch = {
-
-        "encoder_inputs":
-            tf.random.uniform(
-                (64, 40),
-                maxval=vocab_size,
-                dtype=tf.int32
-            ),
-
-        "decoder_inputs":
-            tf.random.uniform(
-                (64, 39),
-                maxval=vocab_size,
-                dtype=tf.int32
-            )
+    model = Transformer(vocab_size=vocab_size)
+    dummy = {
+        "encoder_inputs": tf.random.uniform((64, 40), maxval=vocab_size, dtype=tf.int32),
+        "decoder_inputs": tf.random.uniform((64, 39), maxval=vocab_size, dtype=tf.int32),
     }
-
-    output = model(
-        dummy_batch
-    )
-
-    print(
-        "Output Shape:",
-        output.shape
-    )
-
+    print("Output Shape:", model(dummy).shape)
     model.summary()

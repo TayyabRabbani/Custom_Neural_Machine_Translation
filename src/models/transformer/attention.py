@@ -3,202 +3,49 @@
 import tensorflow as tf
 
 
-def scaled_dot_product_attention(
-    query,
-    key,
-    value,
-    mask=None
-):
-    """
-    query: (batch, heads, seq_q, depth)
-    key:   (batch, heads, seq_k, depth)
-    value: (batch, heads, seq_v, depth)
-    """
+class MultiHeadAttention(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, **kwargs):
+        super().__init__(**kwargs)
+        assert d_model % num_heads == 0
 
-    matmul_qk = tf.matmul(
-        query,
-        key,
-        transpose_b=True
-    )
-
-    dk = tf.cast(
-        tf.shape(key)[-1],
-        tf.float32
-    )
-
-    scaled_logits = (
-        matmul_qk
-        / tf.math.sqrt(dk)
-    )
-
-    if mask is not None:
-
-        scaled_logits += (
-            mask * -1e9
-        )
-
-    attention_weights = tf.nn.softmax(
-        scaled_logits,
-        axis=-1
-    )
-
-    output = tf.matmul(
-        attention_weights,
-        value
-    )
-
-    return output, attention_weights
-
-
-class MultiHeadAttention(
-    tf.keras.layers.Layer
-):
-
-    def __init__(
-        self,
-        d_model,
-        num_heads
-    ):
-        super().__init__()
-        self.supports_masking = True
-
-        self.num_heads = num_heads
         self.d_model = d_model
+        self.num_heads = num_heads
+        self.depth = d_model // num_heads
 
-        assert (
-            d_model
-            % num_heads
-            == 0
-        )
+        self.wq = tf.keras.layers.Dense(d_model)
+        self.wk = tf.keras.layers.Dense(d_model)
+        self.wv = tf.keras.layers.Dense(d_model)
+        self.out = tf.keras.layers.Dense(d_model)
 
-        self.depth = (
-            d_model
-            // num_heads
-        )
+    def split_heads(self, x, batch_size):
+        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
+        return tf.transpose(x, perm=[0, 2, 1, 3])
 
-        self.wq = tf.keras.layers.Dense(
-            d_model
-        )
+    def call(self, query, key, value, attn_mask=None):
+        batch_size = tf.shape(query)[0]
 
-        self.wk = tf.keras.layers.Dense(
-            d_model
-        )
+        query = self.split_heads(self.wq(query), batch_size)
+        key = self.split_heads(self.wk(key), batch_size)
+        value = self.split_heads(self.wv(value), batch_size)
 
-        self.wv = tf.keras.layers.Dense(
-            d_model
-        )
+        logits = tf.matmul(query, key, transpose_b=True)
+        logits = logits / tf.math.sqrt(tf.cast(self.depth, tf.float32))
 
-        self.dense = (
-            tf.keras.layers.Dense(
-                d_model
-            )
-        )
+        if attn_mask is not None:
+            logits += attn_mask * -1e9
 
-    def split_heads(
-        self,
-        x,
-        batch_size
-    ):
+        weights = tf.nn.softmax(logits, axis=-1)
 
-        x = tf.reshape(
-            x,
-            (
-                batch_size,
-                -1,
-                self.num_heads,
-                self.depth
-            )
-        )
+        context = tf.matmul(weights, value)
+        context = tf.transpose(context, perm=[0, 2, 1, 3])
+        context = tf.reshape(context, (batch_size, -1, self.d_model))
 
-        return tf.transpose(
-            x,
-            perm=[0, 2, 1, 3]
-        )
-
-    def call(
-        self,
-        query,
-        key,
-        value,
-        mask=None
-    ):
-
-        batch_size = tf.shape(
-            query
-        )[0]
-
-        query = self.wq(query)
-        key = self.wk(key)
-        value = self.wv(value)
-
-        query = self.split_heads(
-            query,
-            batch_size
-        )
-
-        key = self.split_heads(
-            key,
-            batch_size
-        )
-
-        value = self.split_heads(
-            value,
-            batch_size
-        )
-
-        scaled_attention, attention_weights = (
-            scaled_dot_product_attention(
-                query,
-                key,
-                value,
-                mask
-            )
-        )
-
-        scaled_attention = tf.transpose(
-            scaled_attention,
-            perm=[0, 2, 1, 3]
-        )
-
-        concat_attention = tf.reshape(
-            scaled_attention,
-            (
-                batch_size,
-                -1,
-                self.d_model
-            )
-        )
-
-        output = self.dense(
-            concat_attention
-        )
-
-        return output, attention_weights
+        return self.out(context), weights
 
 
 if __name__ == "__main__":
-
-    layer = MultiHeadAttention(
-        d_model=256,
-        num_heads=8
-    )
-
-    dummy = tf.random.normal(
-        (64, 40, 256)
-    )
-
-    output, attention = layer(
-        dummy,
-        dummy,
-        dummy
-    )
-
-    print(
-        "Output Shape:",
-        output.shape
-    )
-
-    print(
-        "Attention Shape:",
-        attention.shape
-    )
+    layer = MultiHeadAttention(d_model=256, num_heads=8)
+    dummy = tf.random.normal((64, 40, 256))
+    output, attention = layer(dummy, dummy, dummy)
+    print("Output Shape:", output.shape)
+    print("Attention Shape:", attention.shape)
